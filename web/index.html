@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siemens SAT Report Copilot</title>
+<style>
+  :root {
+    --siemens-petrol: #009999;
+    --siemens-ink: #001b2e;
+    --siemens-accent: #00e5d0;
+    --bg-dark: #070d12;
+    --bg-panel: #0d1722;
+    --border-color: rgba(0, 153, 153, 0.25);
+    --border-hover: rgba(0, 229, 208, 0.5);
+    --text-primary: #f8fafc;
+    --text-muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background: var(--bg-dark);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text-primary);
+  }
+  .app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+  }
+  
+  /* Top Telemetry Header */
+  .top-bar {
+    height: 50px;
+    background: #001b2e;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    z-index: 10;
+  }
+  .brand-zone {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .siemens-brand {
+    color: var(--siemens-petrol);
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+  }
+  .copilot-badge {
+    background: rgba(0, 229, 208, 0.12);
+    color: var(--siemens-accent);
+    border: 1px solid rgba(0, 229, 208, 0.3);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+  }
+  .active-plan-pill {
+    font-size: 12px;
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .telemetry-zone {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .telemetry-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+  .telemetry-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.9); }
+  }
+
+  /* Main Workspace: 100% Edge-to-Edge */
+  .workspace {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    padding: 10px;
+    gap: 0;
+    position: relative;
+  }
+
+  /* Chat Pane: Placed at the end (Right side) with expanded width */
+  .chat-pane {
+    width: 520px;
+    min-width: 420px;
+    max-width: 850px;
+    height: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 5;
+  }
+  .chat-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 27, 46, 0.4);
+  }
+  .chat-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .side-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .side-btn:hover {
+    background: rgba(0, 153, 153, 0.25);
+    border-color: var(--siemens-petrol);
+    color: #fff;
+  }
+
+  /* Draggable Divider */
+  .resizer {
+    width: 8px;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.15s ease;
+    margin: 0 4px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .resizer:hover, .resizer.dragging {
+    background: var(--siemens-petrol);
+    box-shadow: 0 0 10px rgba(0, 153, 153, 0.6);
+  }
+
+  /* Language Selector Toggle in Dashboard Top Bar */
+  .lang-selector-pill {
+    display: flex;
+    align-items: center;
+    background: rgba(0, 27, 46, 0.7);
+    border: 1px solid rgba(0, 229, 208, 0.35);
+    border-radius: 6px;
+    padding: 2px 5px;
+    gap: 4px;
+  }
+  .lang-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-right: 2px;
+  }
+  .lang-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    padding: 3px 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+  }
+  .lang-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .lang-btn.active {
+    background: var(--siemens-petrol);
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(0, 153, 153, 0.4);
+  }
+
+  /* Message Stream */
+  .chat-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .msg-bubble {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+    max-width: 90%;
+    word-break: break-word;
+  }
+  .msg-user {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #00505a, #00646e);
+    color: #ffffff;
+    border: 1px solid rgba(0, 229, 208, 0.3);
+  }
+  .msg-assistant {
+    align-self: flex-start;
+    background: #132230;
+    color: #e2e8f0;
+    border-left: 3px solid var(--siemens-petrol);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-right: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .msg-assistant strong { color: #00e5d0; }
+
+  /* Image Attachment Preview Bar */
+  .attachment-preview-bar {
+    display: none;
+    padding: 6px 12px;
+    background: rgba(0, 153, 153, 0.12);
+    border-top: 1px solid var(--border-color);
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--siemens-accent);
+    flex-wrap: wrap;
+    max-height: 90px;
+    overflow-y: auto;
+  }
+  .attachment-thumb-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .attachment-thumb {
+    height: 38px;
+    width: 38px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border-hover);
+  }
+  .thumb-remove-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: #fff;
+    border: none;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    line-height: 1;
+  }
+  .thumb-remove-btn:hover {
+    background: #dc2626;
+  }
+  .remove-attachment-btn {
+    margin-left: auto;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+
+  /* Telemetry Tag in Message Bubble */
+  .msg-telemetry-tag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: #64748b;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-family: monospace;
+    flex-wrap: wrap;
+  }
+  .msg-telemetry-tag span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Pinned Bottom Input Bar: NEVER HIDES */
+  .chat-input-bar {
+    padding: 10px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #091219;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .input-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .chat-input {
+    width: 100%;
+    background: #111e2a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    padding: 9px 40px 9px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+  .chat-input:focus {
+    border-color: var(--siemens-accent);
+    box-shadow: 0 0 10px rgba(0, 229, 208, 0.2);
+  }
+  .clip-btn {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+  }
+  .clip-btn:hover { color: #fff; }
+  .send-btn {
+    background: linear-gradient(135deg, var(--siemens-petrol), #007993);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 14px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .send-btn:hover {
+    background: linear-gradient(135deg, #00b3b3, #008fa3);
+    box-shadow: 0 0 12px rgba(0, 153, 153, 0.4);
+  }
+
+  /* Right Column: Live Report Preview */
+  .preview-pane {
+    flex: 1;
+    height: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .preview-toolbar {
+    height: 48px;
+    padding: 0 16px;
+    background: rgba(0, 27, 46, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .preview-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .act-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f1f5f9;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .act-btn:hover {
+    background: rgba(0, 153, 153, 0.2);
+    border-color: var(--siemens-petrol);
+    color: #fff;
+  }
+  .act-btn--primary {
+    background: var(--siemens-petrol);
+    border-color: var(--siemens-petrol);
+    color: #fff;
+    font-weight: 700;
+  }
+  .act-btn--primary:hover {
+    background: #00b3b3;
+    box-shadow: 0 0 12px rgba(0, 153, 153, 0.4);
+  }
+  .report-frame {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #ffffff;
+  }
+</style>
+</head>
+<body>
+<div class="app-container">
+  
+  <!-- 1. Top Telemetry Header -->
+  <div class="top-bar">
+    <div class="brand-zone">
+      <span class="siemens-brand">SIEMENS</span>
+      <span class="copilot-badge">SAT REPORT COPILOT</span>
+      <span class="active-plan-pill" id="active-plan-display">Plano: <strong>XPNB-1229</strong></span>
+    </div>
+    <div class="telemetry-zone">
+      <!-- Language Selector Toggle -->
+      <div class="lang-selector-pill" id="lang-selector">
+        <span class="lang-label">🌐 Idioma / Language:</span>
+        <button class="lang-btn active" id="btn-lang-en" onclick="changeLanguage('en')">🇬🇧 English</button>
+        <button class="lang-btn" id="btn-lang-pt" onclick="changeLanguage('pt')">🇵🇹 Português</button>
+      </div>
+
+      <div class="telemetry-pill" id="tel-jira">
+        <span class="telemetry-dot" id="dot-jira"></span> Jira API: <span id="txt-jira">Online</span>
+      </div>
+      <div class="telemetry-pill" id="tel-xray">
+        <span class="telemetry-dot" id="dot-xray"></span> Xray Cloud: <span id="txt-xray">Online</span>
+      </div>
+      <div class="telemetry-pill" id="tel-gemini" onclick="toggleTelemetryModal()" style="cursor:pointer;" title="Clique para ver detalhes de utilização do modelo e quota">
+        <span class="telemetry-dot" id="dot-gemini"></span> <span id="txt-gemini">Gemini AI: Online</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Model Telemetry Modal Dialog -->
+  <div id="telemetry-modal" style="display:none; position:fixed; top:58px; right:20px; width:380px; background:#0d1722; border:1px solid #00e5d0; border-radius:8px; padding:16px; box-shadow:0 12px 32px rgba(0,0,0,0.85); z-index:9999; font-size:12px; color:#f8fafc;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+      <strong style="color:#00e5d0; font-size:13px; display:flex; align-items:center; gap:6px;">📊 Telemetria do Modelo (Google Gemini)</strong>
+      <button onclick="toggleTelemetryModal()" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer;">✕</button>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+      <div style="background:rgba(255,255,255,0.04); padding:8px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+        <div style="color:#94a3b8; font-size:10px; text-transform:uppercase; font-weight:700;">Modelo Ativo</div>
+        <div id="modal-model-name" style="font-weight:700; color:#34d399; margin-top:2px; font-family:monospace; font-size:12px;">gemini-3-flash-preview</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04); padding:8px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+        <div style="color:#94a3b8; font-size:10px; text-transform:uppercase; font-weight:700;">Latência (Última)</div>
+        <div id="modal-latency" style="font-weight:700; color:#38bdf8; margin-top:2px; font-size:12px;">--</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04); padding:8px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+        <div style="color:#94a3b8; font-size:10px; text-transform:uppercase; font-weight:700;">Tokens In / Out</div>
+        <div id="modal-tokens-io" style="font-weight:700; color:#fcd34d; margin-top:2px; font-size:12px;">-- / --</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.04); padding:8px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+        <div style="color:#94a3b8; font-size:10px; text-transform:uppercase; font-weight:700;">Chamadas na Sessão</div>
+        <div id="modal-session-calls" style="font-weight:700; color:#cbd5e1; margin-top:2px; font-size:12px;">0</div>
+      </div>
+    </div>
+    <div style="background:rgba(0,153,153,0.08); border:1px solid rgba(0,229,208,0.2); border-radius:4px; padding:10px; margin-bottom:10px;">
+      <div style="font-size:11px; font-weight:700; color:#00e5d0; margin-bottom:6px;">⚡ Ordem de Resiliência (Fallback Automático):</div>
+      <ol style="margin-left:16px; font-size:11px; line-height:1.45; color:#cbd5e1;">
+        <li><strong style="color:#fff;">gemini-3-flash-preview</strong> (Principal &middot; Raciocínio SAT)</li>
+        <li><strong>gemini-3.1-flash-lite</strong> (Fallback &middot; Resposta Ultra-rápida)</li>
+        <li><strong>gemini-3.5-flash</strong> (Fallback &middot; Visão Multimodal Avançada)</li>
+        <li><strong>gemini-flash-latest</strong> (Fallback &middot; Versão de Produção)</li>
+      </ol>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b;">
+      <span>Tier: Standard / Pay-as-you-go</span>
+      <span>Até 2.000 RPM (Pay-as-you-go)</span>
+    </div>
+  </div>
+
+  <!-- 2. Workspace: Edge-to-Edge Split (Preview on Left, Chat on Right "no fim") -->
+  <div class="workspace" id="workspace-container">
+    
+    <!-- Left Pane: Live Report Preview (Takes Primary Focus) -->
+    <div class="preview-pane" id="preview-pane">
+      <div class="preview-toolbar">
+        <div class="preview-title">
+          📄 Live Preview &middot; <span style="color:#00e5d0;">Template Oficial Siemens SAT</span>
+        </div>
+        <div class="action-buttons">
+          <button class="act-btn" id="btn-restore-template" onclick="restoreOfficialTemplate()" style="border-color:#00e5d0; color:#00e5d0; background:rgba(0,229,208,0.08);" title="Restaurar o Template Oficial Recomendado Siemens SAT">✨ Template Recomendado</button>
+          <button class="act-btn" onclick="toggleChatSide()" title="Alternar posição do chat (Esquerda / Direita)">⇄ Alternar Lado</button>
+          <button class="act-btn act-btn--primary" onclick="exportReport('E:\\FLEX')">💾 Guardar em E:\FLEX</button>
+          <button class="act-btn" onclick="openInBrowser()">🌐 Abrir no Navegador</button>
+          <button class="act-btn" onclick="downloadHtml()">📥 Descarregar HTML</button>
+        </div>
+      </div>
+      <iframe class="report-frame" id="report-frame" src="/api/current_report"></iframe>
+    </div>
+
+    <!-- Draggable Resizer Divider -->
+    <div class="resizer" id="drag-resizer" title="Arrastar para redimensionar largura do chat"></div>
+
+    <!-- Right Pane: Pinned Chat (Placed "no fim" with increased width) -->
+    <div class="chat-pane" id="chat-pane">
+      <div class="chat-header">
+        <div class="chat-title">💬 Gemini Chat &middot; Siemens SAT Specialist</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:11px; color:#00e5d0;">● Antigravity Engine</span>
+          <button class="side-btn" onclick="toggleChatSide()" title="Alternar lado do chat">⇄</button>
+        </div>
+      </div>
+
+      <!-- Message History Container -->
+      <div class="chat-stream" id="chat-stream">
+        <div class="msg-bubble msg-assistant" id="welcome-msg">
+          Olá! Sou o <strong>Gemini</strong>, o teu assistente de inteligência artificial Siemens SAT (em modo Antigravity).<br><br>
+          • 🌐 <strong>Idioma do Relatório</strong>: Podes alternar no topo entre <strong>English</strong> e <strong>Português</strong> a qualquer momento!<br>
+          • 📋 Podes colar capturas de ecrã diretamente com <strong>Ctrl+V</strong>!<br>
+          • 🎬 Pede temas, espaços para vídeos de demonstração, análise de defeitos ou conclusões executivas.
+        </div>
+      </div>
+
+      <!-- Pasted Image Preview Bar -->
+      <div class="attachment-preview-bar" id="attachment-bar">
+        <div id="attachment-thumbs-list" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
+        <span id="attachment-count-label">📷 0 imagens anexadas</span>
+        <button class="remove-attachment-btn" onclick="clearAttachments()">✕ Limpar todas</button>
+      </div>
+
+      <!-- Pinned Chat Input: NEVER HIDES -->
+      <div class="chat-input-bar">
+        <input type="file" id="file-input" style="display:none;" accept="image/*" multiple onchange="handleFileSelect(event)" />
+        <div class="input-wrapper">
+          <input 
+            type="text" 
+            class="chat-input" 
+            id="chat-input" 
+            placeholder="Escreve aqui ou prime Ctrl+V para colar capturas (suporta múltiplas imagens)..." 
+            onkeydown="if(event.key==='Enter') submitMessage();"
+          />
+          <button class="clip-btn" onclick="document.getElementById('file-input').click()" title="Anexar imagens (podes selecionar várias)">📎</button>
+        </div>
+        <button class="send-btn" onclick="submitMessage()">Enviar ➤</button>
+      </div>
+    </div>
+
+  </div>
+
+  </div>
+</div>
+
+<script>
+let currentAttachments = [];
+let currentState = {};
+let messageHistory = [];
+
+// Load initial report
+fetch('/api/state')
+  .then(r => r.json())
+  .then(data => {
+    currentState = data.state;
+    updateActivePlanDisplay(currentState.plan_key);
+    if (currentState && currentState.language) {
+      const isPt = (currentState.language === 'pt' || currentState.language === 'portuguese');
+      document.getElementById('btn-lang-en').classList.toggle('active', !isPt);
+      document.getElementById('btn-lang-pt').classList.toggle('active', isPt);
+    }
+    if (data.services) {
+      updateServicePill('jira', data.services.jira);
+      updateServicePill('xray', data.services.xray);
+      updateServicePill('gemini', data.services.gemini);
+    }
+  });
+
+function updateServicePill(name, status) {
+  const isOnline = status === 'online';
+  const dot = document.getElementById('dot-' + name);
+  const txt = document.getElementById('txt-' + name);
+  const pill = document.getElementById('tel-' + name);
+  if (dot) {
+    dot.style.background = isOnline ? '#10b981' : '#ef4444';
+    dot.style.boxShadow = isOnline ? '0 0 8px #10b981' : '0 0 8px #ef4444';
+  }
+  if (txt) txt.textContent = isOnline ? 'Online' : 'Offline';
+  if (pill) {
+    pill.style.color = isOnline ? '#34d399' : '#f87171';
+    pill.style.borderColor = isOnline ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+    pill.style.background = isOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+  }
+}
+
+function updateActivePlanDisplay(planKey) {
+  const el = document.getElementById('active-plan-display');
+  if (el && planKey) el.innerHTML = 'Plano: <strong>' + planKey + '</strong>';
+}
+
+function updateAttachmentBar() {
+  const bar = document.getElementById('attachment-bar');
+  const list = document.getElementById('attachment-thumbs-list');
+  const label = document.getElementById('attachment-count-label');
+  if (!bar || !list) return;
+
+  if (currentAttachments.length === 0) {
+    bar.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  list.innerHTML = '';
+  currentAttachments.forEach((b64, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'attachment-thumb-wrap';
+    wrap.innerHTML = `
+      <img class="attachment-thumb" src="data:image/png;base64,${b64}" />
+      <button class="thumb-remove-btn" onclick="removeAttachment(${idx})" title="Remover imagem">×</button>
+    `;
+    list.appendChild(wrap);
+  });
+
+  const count = currentAttachments.length;
+  label.textContent = `📷 ${count} ${count === 1 ? 'imagem anexada' : 'imagens anexadas'}`;
+}
+
+function removeAttachment(idx) {
+  currentAttachments.splice(idx, 1);
+  updateAttachmentBar();
+}
+
+function clearAttachments() {
+  currentAttachments = [];
+  updateAttachmentBar();
+  const fi = document.getElementById('file-input');
+  if (fi) fi.value = '';
+}
+
+// Global Clipboard Paste Listener (Ctrl+V anywhere in window - supports multiple images)
+window.addEventListener('paste', function(e) {
+  const items = (e.clipboardData || window.clipboardData).items;
+  let found = false;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type && items[i].type.indexOf('image') !== -1) {
+      const blob = items[i].getAsFile();
+      if (!blob) continue;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const b64 = event.target.result.split(',')[1];
+        if (b64) {
+          currentAttachments.push(b64);
+          updateAttachmentBar();
+        }
+      };
+      reader.readAsDataURL(blob);
+      found = true;
+    }
+  }
+  if (found) {
+    e.preventDefault();
+  }
+});
+
+function handleFileSelect(e) {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  Array.from(files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      const b64 = event.target.result.split(',')[1];
+      if (b64) {
+        currentAttachments.push(b64);
+        updateAttachmentBar();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function appendMessage(role, text, telemetry = null) {
+  const stream = document.getElementById('chat-stream');
+  const div = document.createElement('div');
+  div.className = 'msg-bubble ' + (role === 'user' ? 'msg-user' : 'msg-assistant');
+  
+  let formattedText = text.replace(/\\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  if (role === 'assistant' && telemetry) {
+    const modelShort = telemetry.model || 'gemini-3-flash-preview';
+    const latStr = telemetry.latency_s ? `${telemetry.latency_s}s` : '';
+    const tokCount = telemetry.total_tokens ? telemetry.total_tokens.toLocaleString() : '';
+    const inOutStr = (telemetry.prompt_tokens && telemetry.candidates_tokens) ? `(in: ${telemetry.prompt_tokens.toLocaleString()} / out: ${telemetry.candidates_tokens.toLocaleString()})` : '';
+    
+    formattedText += `
+      <div class="msg-telemetry-tag">
+        <span>⚡ ${modelShort}</span>
+        ${latStr ? `<span>⏱️ ${latStr}</span>` : ''}
+        ${tokCount ? `<span>📊 ${tokCount} tok ${inOutStr}</span>` : ''}
+      </div>
+    `;
+  }
+  
+  div.innerHTML = formattedText;
+  stream.appendChild(div);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function updateTelemetryDisplay(telem) {
+  if (!telem) return;
+  const txtGemini = document.getElementById('txt-gemini');
+  if (txtGemini) {
+    const mShort = (telem.model || 'gemini').replace('gemini-', '');
+    txtGemini.innerHTML = `Gemini: <strong style="color:#00e5d0;">${mShort}</strong> <span style="color:#94a3b8;font-size:10px;">(${telem.latency_s}s)</span>`;
+  }
+  const modalModel = document.getElementById('modal-model-name');
+  if (modalModel) modalModel.textContent = telem.model || 'gemini-3-flash-preview';
+  const modalLatency = document.getElementById('modal-latency');
+  if (modalLatency) modalLatency.textContent = telem.latency_s ? (telem.latency_s + 's') : '--';
+  const modalTokens = document.getElementById('modal-tokens-io');
+  if (modalTokens) modalTokens.textContent = `${(telem.prompt_tokens || 0).toLocaleString()} in / ${(telem.candidates_tokens || 0).toLocaleString()} out`;
+  
+  sessionCallCount++;
+  const modalCalls = document.getElementById('modal-session-calls');
+  if (modalCalls) modalCalls.textContent = sessionCallCount;
+}
+
+let sessionCallCount = 0;
+
+function toggleTelemetryModal() {
+  const m = document.getElementById('telemetry-modal');
+  if (m) m.style.display = (m.style.display === 'none' || !m.style.display) ? 'block' : 'none';
+}
+
+function sendPrompt(text) {
+  document.getElementById('chat-input').value = text;
+  submitMessage();
+}
+
+function submitMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text && currentAttachments.length === 0) return;
+
+  const count = currentAttachments.length;
+  const imgLabel = count > 0 ? `<br><small style="color:#a7f3d0;">[📷 ${count} ${count === 1 ? 'imagem anexada' : 'imagens anexadas'}]</small>` : '';
+  appendMessage('user', text + imgLabel);
+  input.value = '';
+
+  const imgsToSend = [...currentAttachments];
+  clearAttachments();
+
+  // Show typing indicator
+  appendMessage('assistant', '<em>A consultar Jira, Xray e a atualizar relatório...</em>');
+
+  messageHistory.push({ role: 'user', text: text });
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: text,
+      images_b64: imgsToSend,
+      image_b64: imgsToSend[0] || null,
+      state: currentState,
+      history: messageHistory
+    })
+  })
+  .then(r => r.json())
+  .then(res => {
+    // Remove typing indicator
+    const stream = document.getElementById('chat-stream');
+    stream.removeChild(stream.lastChild);
+
+    appendMessage('assistant', res.reply, res.telemetry);
+    messageHistory.push({ role: 'model', text: res.reply });
+    currentState = res.state;
+    updateActivePlanDisplay(currentState.plan_key);
+
+    if (res.telemetry) {
+      updateTelemetryDisplay(res.telemetry);
+    }
+
+    // Update iframe without reload flicker!
+    const frame = document.getElementById('report-frame');
+    frame.srcdoc = res.html;
+  })
+  .catch(err => {
+    appendMessage('assistant', 'Erro ao comunicar com o servidor: ' + err);
+  });
+}
+
+function exportReport(folder) {
+  fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder: folder, state: currentState })
+  })
+  .then(r => r.json())
+  .then(res => {
+    alert('Relatório guardado com sucesso em: ' + res.path);
+  });
+}
+
+function openInBrowser() {
+  window.open('/api/current_report', '_blank');
+}
+
+function downloadHtml() {
+  window.location.href = '/api/download_report';
+}
+
+function changeLanguage(lang) {
+  document.getElementById('btn-lang-en').classList.toggle('active', lang === 'en');
+  document.getElementById('btn-lang-pt').classList.toggle('active', lang === 'pt');
+
+  fetch('/api/set_language', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: lang })
+  })
+  .then(r => r.json())
+  .then(data => {
+    currentState.language = lang;
+    const frame = document.getElementById('report-frame');
+    if (data.html) {
+      frame.srcdoc = data.html;
+    } else {
+      frame.src = '/api/current_report?t=' + Date.now();
+    }
+    appendMessage('assistant', lang === 'pt' ? '🇵🇹 Idioma do relatório alterado para **Português**.' : '🇬🇧 Report language set to **English**.');
+  })
+  .catch(err => {
+    console.error('Language change error:', err);
+  });
+}
+
+function toggleChatSide() {
+  const ws = document.getElementById('workspace-container');
+  const chat = document.getElementById('chat-pane');
+  const preview = document.getElementById('preview-pane');
+  const res = document.getElementById('drag-resizer');
+  
+  if (!ws || !chat || !preview) return;
+
+  // Check if chat is currently at the end
+  if (chat.nextElementSibling === null) {
+    // Chat is on the right -> move to left
+    ws.insertBefore(chat, preview);
+    if (res) ws.insertBefore(res, preview);
+  } else {
+    // Chat is on the left -> move to right (end)
+    if (res) ws.appendChild(res);
+    ws.appendChild(chat);
+  }
+}
+
+async function restoreOfficialTemplate() {
+  const btn = document.getElementById('btn-restore-template');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '⏳ A sincronizar...';
+  appendMessage('assistant', '<em>A sincronizar dados oficiais do Jira e a restaurar o Template Oficial Siemens SAT...</em>');
+  try {
+    const res = await fetch('/api/restore_template', { method: 'POST' });
+    const data = await res.json();
+    if (data.html) {
+      const frame = document.getElementById('report-frame');
+      frame.srcdoc = data.html;
+      updateActivePlanDisplay(data.plan_key || 'XPNB-1229');
+      appendMessage('assistant', '✨ **Template Oficial Recomendado Siemens SAT restaurado com sucesso!** O relatório está 100% sincronizado com os dados oficiais do Jira para o plano **' + (data.plan_key || 'XPNB-1229') + '**.');
+    }
+  } catch (e) {
+    console.error(e);
+    appendMessage('assistant', 'Erro ao restaurar template: ' + e);
+  } finally {
+    if (btn) btn.innerHTML = orig;
+  }
+}
+
+// Draggable Resizer Handler
+(function initResizer() {
+  const resizer = document.getElementById('drag-resizer');
+  const chatPane = document.getElementById('chat-pane');
+  if (!resizer || !chatPane) return;
+
+  let isDragging = false;
+
+  resizer.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    const isChatOnRight = (chatPane.nextElementSibling === null);
+    let newWidth;
+    if (isChatOnRight) {
+      newWidth = window.innerWidth - e.clientX - 10;
+    } else {
+      newWidth = e.clientX - 10;
+    }
+    if (newWidth >= 380 && newWidth <= 950) {
+      chatPane.style.width = newWidth + 'px';
+    }
+  });
+
+  window.addEventListener('mouseup', function() {
+    if (isDragging) {
+      isDragging = false;
+      resizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "rules": [
+    "NUNCA apresentar o código HTML do relatório no lado do chat; a janela de chat é exclusivamente conversacional em Português (pt-PT), e todo o código HTML do relatório atualizado deve ser sempre injetado diretamente no Live Preview sem despejar tags ou blocos de código bruto no chat.",
+    "NUNCA apresentar nos relatórios textos em alemão ou qualquer outra língua que não o inglês corporativo oficial (Siemens SAT International Standard); todos os sumários, descrições, estados e notas do Jira que estejam originalmente em alemão devem ser obrigatoriamente traduzidos para inglês técnico de engenharia no relatório final.",
+    "Reports must ALWAYS be generated in English by default (Siemens SAT international standard), unless explicitly requested in another language.",
+    "Chat conversation with the user is in Portuguese (pt-PT), friendly, highly professional, direct and expert (like in Google Antigravity).",
+    "Preserve official Siemens corporate styling: Petrol (#009999), Ink (#001b2e), accent (#00e5d0), Segoe UI typography, and high-impact KPI cards.",
+    "Support both tabbed navigation and continuous single-page layouts based on user preference.",
+    "Keep reports executive-ready for management and engineering meetings (comprehensive test execution breakdowns, defect priorities, root cause hypotheses, firmware target versions).",
+    "Executive defect tables in Siemens SAT reports must include Component/Subsystem, Root Cause Hypothesis, and Firmware Target Version columns for complete engineering traceability.",
+    "Do not create or display quick buttons, preset chips, or hardcoded shortcut buttons in the UI for test plans or actions, as the user frequently switches between different test plans dynamically and requires a clean, unobstructed interface.",
+    "Dashboard layout has the Live Report Preview on the left, Resizable Chat placed on the right (at the end) with expanded comfortable reading width (>=520px), and instant bilingual language toggle (English / Portuguese) on the dashboard header.",
+    "Quando o utilizador indicar ou mudar de Test Plan (ex: XPNB-1229, XPECD-5455, etc.), o relatório deve ser imediatamente gerado e focado a 100% nos dados reais desse plano específico do Jira, sem misturar ou manter suites de planos anteriores."
+  ],
+  "preferences": {
+    "report_language": "English",
+    "chat_language": "Portuguese",
+    "allow_quick_chips": false,
+    "chat_position": "end",
+    "chat_min_width": 520
+  },
+  "interaction_notes": [
+    "User specified: reports must always be in English, chat in Portuguese.",
+    "User values high responsiveness and zero boilerplate responses.",
+    "User strictly instructed: do not create quick buttons / preset chips because test plans change constantly.",
+    "User requested chat placed at the end (right side), increased chat width, and a dashboard option for English and Portuguese."
+  ]
+}
