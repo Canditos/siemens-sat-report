@@ -645,14 +645,14 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
             has_state_modification = True
 
         # Smart Fallback: Execution suites version filtering
-        ver_filter_match = re.search(r'(?:apenas|so|somente|filtrar?|listar?|isol(?:ar|a))\s+(?:os\s+da\s+|pela\s+|por\s+|as\s+de\s+|su[ií]tes\s+da\s+)?(v\d+\.\d+(?:\.\d+)?)\b', user_prompt, re.I)
+        ver_filter_match = re.search(r'(?:apenas|so|somente|filtrar?|listar?|liestar?|isol(?:ar|a)|mostrar?)\s+.*?(v\d+\.\d+(?:\.\d+)?)\b', user_prompt, re.I)
         if ver_filter_match:
             matched_v = ver_filter_match.group(1).lower()
             state["filter_version"] = matched_v
             has_state_modification = True
             print(f"[GeminiCopilot] Ativado filtro de suites por versao: {matched_v}")
 
-        if re.search(r'(?:todas\s+as\s+vers|remover\s+filtro|sem\s+filtro)', user_prompt, re.I):
+        if re.search(r'(?:todas\s+as\s+vers|remover\s+filtro|sem\s+filtro|limpar\s+filtro)', user_prompt, re.I):
             if "filter_version" in state:
                 state.pop("filter_version", None)
                 has_state_modification = True

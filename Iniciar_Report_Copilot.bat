@@ -95,7 +95,11 @@ echo.
 
 :START_SERVER
 echo.
-echo [2/2] A iniciar o servidor e abrir o Copilot no navegador...
+echo [2/2] A garantir porta 5050 livre e a iniciar o Copilot...
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr /r ":5050\>"') do (
+    taskkill /f /pid %%a >nul 2>nul
+)
+timeout /t 1 >nul
 echo Interface: http://127.0.0.1:5050
 echo.
 "%REAL_PY%" server.py

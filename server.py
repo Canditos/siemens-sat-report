@@ -50,23 +50,48 @@ global_state = {
     "current_html": ""
 }
 
-# Initial render with official recommended Siemens SAT template
-try:
+# Initial render with fast local caching and Jira sync
+CACHE_FILE = os.path.join(CURRENT_DIR, "cached_plan_data.json")
+
+def load_initial_plan():
     plan_to_load = global_state.get("plan_key", "XPNB-1229")
-    info = client.get_issue_info(plan_to_load)
-    if info:
-        global_state["plan_summary"] = info.get("summary", global_state["plan_summary"])
-        global_state["project_key"] = info.get("project", plan_to_load.split('-')[0])
-    execs = client.get_test_executions(plan_to_load)
-    metrics = client.get_execution_metrics(execs)
-    global_state["executions"] = metrics
-    defects = client.get_plan_linked_defects(plan_to_load, execs)
-    global_state["defects"] = defects
-    global_state["current_html"] = render_html_report(global_state)
-    print(f"[Server] Template Oficial Siemens SAT carregado com sucesso ({len(metrics)} execucoes, {len(defects)} defeitos)!")
-except Exception as e:
-    print(f"[Server] Initial render error: {e}")
-    global_state["current_html"] = render_html_report(global_state)
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+                if cached.get("plan_key") == plan_to_load and cached.get("executions"):
+                    global_state.update(cached)
+                    global_state["current_html"] = render_html_report(global_state)
+                    print(f"[Server] Cache instantaneo carregado ({len(cached.get('executions', []))} execucoes, {len(cached.get('defects', []))} defeitos)!")
+                    return
+        except Exception:
+            pass
+
+    try:
+        info = client.get_issue_info(plan_to_load)
+        if info:
+            global_state["plan_summary"] = info.get("summary", global_state["plan_summary"])
+            global_state["project_key"] = info.get("project", plan_to_load.split('-')[0])
+        execs = client.get_test_executions(plan_to_load)
+        metrics = client.get_execution_metrics(execs)
+        global_state["executions"] = metrics
+        defects = client.get_plan_linked_defects(plan_to_load, execs)
+        global_state["defects"] = defects
+        global_state["current_html"] = render_html_report(global_state)
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({
+                "plan_key": plan_to_load,
+                "plan_summary": global_state["plan_summary"],
+                "project_key": global_state["project_key"],
+                "executions": metrics,
+                "defects": defects
+            }, f, indent=2)
+        print(f"[Server] Template Oficial Siemens SAT carregado com sucesso ({len(metrics)} execucoes, {len(defects)} defeitos)!")
+    except Exception as e:
+        print(f"[Server] Initial render error: {e}")
+        global_state["current_html"] = render_html_report(global_state)
+
+load_initial_plan()
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
@@ -251,11 +276,40 @@ async def download_report():
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
-def open_browser():
-    time.sleep(1.2)
-    webbrowser.open("http://127.0.0.1:5050")
+def free_port(port):
+    import subprocess
+    try:
+        out = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode()
+        curr_pid = str(os.getpid())
+        pids = set()
+        for line in out.strip().splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 5 and f":{port}" in parts[1]:
+                pids.add(parts[-1])
+        for p in pids:
+            if p.isdigit() and p != curr_pid:
+                subprocess.call(f'taskkill /F /PID {p} >nul 2>nul', shell=True)
+        time.sleep(0.4)
+    except Exception:
+        pass
+
+def find_available_port(preferred_port=5050):
+    import socket
+    for p in [preferred_port, preferred_port + 1, preferred_port + 2]:
+        free_port(p)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", p))
+                return p
+        except OSError:
+            continue
+    return preferred_port
 
 if __name__ == "__main__":
-    print("[Server] A iniciar Siemens SAT Report Copilot em http://127.0.0.1:5050 ...")
+    port = find_available_port(5050)
+    print(f"[Server] A iniciar Siemens SAT Report Copilot em http://127.0.0.1:{port} ...")
+    def open_browser():
+        time.sleep(1.2)
+        webbrowser.open(f"http://127.0.0.1:{port}")
     threading.Thread(target=open_browser, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=5050, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
