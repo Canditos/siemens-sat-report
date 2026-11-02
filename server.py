@@ -175,13 +175,16 @@ async def chat_endpoint(request: Request):
     # Merge incoming state
     merged_state = {**global_state, **incoming_state}
 
-    # Execute direct Gemini Antigravity Copilot
-    res = copilot.process_message(
-        prompt, 
-        merged_state, 
-        image_b64=image_b64, 
-        chat_history=history,
-        images_b64=images_b64
+    # Execute Gemini Copilot in a background thread pool so the FastAPI event loop is NEVER blocked
+    import anyio
+    res = await anyio.to_thread.run_sync(
+        lambda: copilot.process_message(
+            prompt, 
+            merged_state, 
+            image_b64=image_b64, 
+            chat_history=history,
+            images_b64=images_b64
+        )
     )
     if isinstance(res, tuple) and len(res) == 4:
         reply, new_state, html, telemetry = res

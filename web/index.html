@@ -787,8 +787,12 @@ function sendPrompt(text) {
 
 function submitMessage() {
   const input = document.getElementById('chat-input');
+  const sendBtn = document.querySelector('.chat-input-row button');
   const text = input.value.trim();
   if (!text && currentAttachments.length === 0) return;
+
+  // Prevent double submissions while in flight
+  if (input.disabled) return;
 
   const count = currentAttachments.length;
   const imgLabel = count > 0 ? `<br><small style="color:#a7f3d0;">[📷 ${count} ${count === 1 ? 'imagem anexada' : 'imagens anexadas'}]</small>` : '';
@@ -798,8 +802,23 @@ function submitMessage() {
   const imgsToSend = [...currentAttachments];
   clearAttachments();
 
-  // Show typing indicator
-  appendMessage('assistant', '<em>A consultar Jira, Xray e a atualizar relatório...</em>');
+  // Disable input & send button while model is thinking
+  input.disabled = true;
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.style.opacity = '0.5';
+  }
+
+  // Show live ticking timer indicator so the user always knows it is active
+  let timerSec = 0;
+  appendMessage('assistant', '<em id="typing-status">⚡ A analisar dados técnicos e a atualizar relatório... (0s)</em>');
+  const timerInterval = setInterval(() => {
+    timerSec++;
+    const statusEl = document.getElementById('typing-status');
+    if (statusEl) {
+      statusEl.textContent = `⚡ A analisar dados técnicos e a atualizar relatório... (${timerSec}s)`;
+    }
+  }, 1000);
 
   messageHistory.push({ role: 'user', text: text });
 
@@ -816,9 +835,11 @@ function submitMessage() {
   })
   .then(r => r.json())
   .then(res => {
-    // Remove typing indicator
+    clearInterval(timerInterval);
     const stream = document.getElementById('chat-stream');
-    stream.removeChild(stream.lastChild);
+    if (stream && stream.lastChild) {
+      stream.removeChild(stream.lastChild);
+    }
 
     appendMessage('assistant', res.reply, res.telemetry);
     messageHistory.push({ role: 'model', text: res.reply });
@@ -831,10 +852,26 @@ function submitMessage() {
 
     // Update iframe without reload flicker!
     const frame = document.getElementById('report-frame');
-    frame.srcdoc = res.html;
+    if (frame && res.html) {
+      frame.srcdoc = res.html;
+    }
   })
   .catch(err => {
-    appendMessage('assistant', 'Erro ao comunicar com o servidor: ' + err);
+    clearInterval(timerInterval);
+    const stream = document.getElementById('chat-stream');
+    if (stream && stream.lastChild) {
+      stream.removeChild(stream.lastChild);
+    }
+    appendMessage('assistant', '⚠️ Erro ao comunicar com o servidor: ' + err);
+  })
+  .finally(() => {
+    clearInterval(timerInterval);
+    input.disabled = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+    }
+    input.focus();
   });
 }
 

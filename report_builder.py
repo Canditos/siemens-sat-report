@@ -758,9 +758,17 @@ def render_html_report(state):
         </div>
         """
 
-    # Execution Table Rows
+    # Execution Table Rows (with optional version filtering)
+    filter_ver = state.get("filter_version") or state.get("filter_executions_version")
+    if filter_ver:
+        active_executions = [x for x in executions if filter_ver.lower() in str(x.get("target_version", "")).lower() or filter_ver.lower() in str(x.get("summary", "")).lower()]
+        if not active_executions:
+            active_executions = executions
+    else:
+        active_executions = executions
+
     exec_rows_html = ""
-    for x in executions:
+    for x in active_executions:
         k = x.get("key", "")
         summ = clean_german_text(x.get("summary", ""))
         tot = x.get("total", 0)
@@ -800,15 +808,23 @@ def render_html_report(state):
         exec_rows_html = "<tr><td colspan='7' style='text-align:center;padding:24px;color:#667085;'>No test executions recorded for this plan</td></tr>"
 
     # Total Summary Row for Executions
+    act_tot_tests = sum(x.get("total", 0) for x in active_executions)
+    act_tot_passed = sum(x.get("passed", 0) for x in active_executions)
+    act_tot_failed = sum(x.get("failed", 0) for x in active_executions)
+    act_tot_skipped = sum(x.get("skipped", 0) for x in active_executions)
+    act_executed = act_tot_passed + act_tot_failed
+    act_rate = round(act_tot_passed / act_executed * 100, 1) if act_executed > 0 else 0.0
+    filter_label = f" (Filtered: {filter_ver})" if filter_ver else ""
+
     total_row_html = f"""
     <tr class="total-row">
         <td>TOTAL</td>
-        <td><strong>All {len(executions)} Mapped Execution Suites</strong></td>
-        <td style="text-align:center">{tot_tests}</td>
-        <td style="text-align:center;color:var(--pass);font-weight:700">{tot_passed}</td>
-        <td style="text-align:center;color:{'var(--fail)' if tot_failed > 0 else 'inherit'};font-weight:700">{tot_failed}</td>
-        <td style="text-align:center;color:var(--na)">{tot_skipped}</td>
-        <td style="text-align:center"><span class="result result--pass" style="font-weight:800;">{global_rate}% PASS</span></td>
+        <td><strong>All {len(active_executions)} Mapped Execution Suites{filter_label}</strong></td>
+        <td style="text-align:center">{act_tot_tests}</td>
+        <td style="text-align:center;color:var(--pass);font-weight:700">{act_tot_passed}</td>
+        <td style="text-align:center;color:{'var(--fail)' if act_tot_failed > 0 else 'inherit'};font-weight:700">{act_tot_failed}</td>
+        <td style="text-align:center;color:var(--na)">{act_tot_skipped}</td>
+        <td style="text-align:center"><span class="result result--pass" style="font-weight:800;">{act_rate}% PASS</span></td>
     </tr>
     """
 

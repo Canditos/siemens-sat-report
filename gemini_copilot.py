@@ -644,6 +644,20 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
             state["hidden_elements"] = [x for x in state["hidden_elements"] if x not in ["summary_box", "banner", "hero", "hero_banner", "resumo"]]
             has_state_modification = True
 
+        # Smart Fallback: Execution suites version filtering
+        ver_filter_match = re.search(r'(?:apenas|so|somente|filtrar?|listar?|isol(?:ar|a))\s+(?:os\s+da\s+|pela\s+|por\s+|as\s+de\s+|su[ií]tes\s+da\s+)?(v\d+\.\d+(?:\.\d+)?)\b', user_prompt, re.I)
+        if ver_filter_match:
+            matched_v = ver_filter_match.group(1).lower()
+            state["filter_version"] = matched_v
+            has_state_modification = True
+            print(f"[GeminiCopilot] Ativado filtro de suites por versao: {matched_v}")
+
+        if re.search(r'(?:todas\s+as\s+vers|remover\s+filtro|sem\s+filtro)', user_prompt, re.I):
+            if "filter_version" in state:
+                state.pop("filter_version", None)
+                has_state_modification = True
+                print("[GeminiCopilot] Removido filtro de versao das suites.")
+
         # Extract <CUSTOM_REPORT_JSON>...</CUSTOM_REPORT_JSON>
         custom_json_match = re.search(r'<CUSTOM_REPORT_JSON>(.*?)</CUSTOM_REPORT_JSON>', raw_text, re.DOTALL | re.IGNORECASE)
         if custom_json_match:
