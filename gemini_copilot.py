@@ -551,15 +551,37 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
 
         has_state_modification = False
 
+        # Intent checks for removal requests
+        user_wants_remove_notes = bool(re.search(
+            r'(?:apag(?:a|ar)|remov(?:e|er)|tir(?:a|ar)|elimin(?:a|ar)|escond(?:e|er))\s+.*?(?:nota|notes|advisory|callout|bloco|tudo|redundant)|(?:redundant|continuam\s+aqui|ainda\s+aqui|nao\s+apagaste|nao\s+esta\s+ok)',
+            user_prompt,
+            re.I
+        ))
+        user_wants_remove_top_block = bool(re.search(
+            r'(?:apaga\s+isto|redundante|continuam\s+aqui|nao\s+apagaste|nao\s+esta\s+ok)',
+            user_prompt,
+            re.I
+        ))
+
+        # Extract <CLEAR_NOTES/> or <REMOVE_NOTES/>
+        if re.search(r'<(?:CLEAR_NOTES|REMOVE_NOTES|RESET_NOTES)\s*/?>', raw_text, re.I):
+            state["executive_notes"] = []
+            state.setdefault("hidden_elements", [])
+            if "executive_notes" not in state["hidden_elements"]:
+                state["hidden_elements"].append("executive_notes")
+            has_state_modification = True
+            raw_text = re.sub(r'<(?:CLEAR_NOTES|REMOVE_NOTES|RESET_NOTES)\s*/?>', '', raw_text, flags=re.I).strip()
+
         # Extract <EXECUTIVE_NOTE>...</EXECUTIVE_NOTE>
         note_matches = re.findall(r'<EXECUTIVE_NOTE>(.*?)</EXECUTIVE_NOTE>', raw_text, re.DOTALL | re.IGNORECASE)
         if note_matches:
-            state.setdefault("executive_notes", [])
-            for n in note_matches:
-                n_clean = clean_german_text(n.strip())
-                if n_clean and n_clean not in state["executive_notes"]:
-                    state["executive_notes"].append(n_clean)
-            has_state_modification = True
+            if not user_wants_remove_notes and not user_wants_remove_top_block:
+                state.setdefault("executive_notes", [])
+                for n in note_matches:
+                    n_clean = clean_german_text(n.strip())
+                    if n_clean and n_clean not in state["executive_notes"]:
+                        state["executive_notes"].append(n_clean)
+                has_state_modification = True
             raw_text = re.sub(r'<EXECUTIVE_NOTE>.*?</EXECUTIVE_NOTE>', '', raw_text, flags=re.DOTALL | re.IGNORECASE).strip()
 
         # Extract <CUSTOM_SECTION title="...">...</CUSTOM_SECTION>
@@ -643,6 +665,31 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
         if user_wants_restore_banner and "hidden_elements" in state:
             state["hidden_elements"] = [x for x in state["hidden_elements"] if x not in ["summary_box", "banner", "hero", "hero_banner", "resumo"]]
             has_state_modification = True
+
+        # Smart Fallback: Notes / Advisory removal intent
+        gemini_said_removed_notes = bool(re.search(
+            r'(?:remov[ei]|elimin[ei]|ocultei|retirei|limp(?:ei|ado))\s+.*?(?:nota|notes|advisory|callout|bloco)',
+            raw_text,
+            re.I
+        ))
+
+        if user_wants_remove_notes or gemini_said_removed_notes:
+            state["executive_notes"] = []
+            state.setdefault("hidden_elements", [])
+            if "executive_notes" not in state["hidden_elements"]:
+                state["hidden_elements"].append("executive_notes")
+            has_state_modification = True
+            print("[GeminiCopilot] Notas de engenharia limpas e ocultadas com sucesso!")
+
+        # Smart Fallback: If user asks to remove redundant area / "continuam aqui" pointing to top
+        if user_wants_remove_top_block:
+            state.setdefault("hidden_elements", [])
+            for el in ["summary_box", "kpi_cards", "executive_notes"]:
+                if el not in state["hidden_elements"]:
+                    state["hidden_elements"].append(el)
+            state["executive_notes"] = []
+            has_state_modification = True
+            print("[GeminiCopilot] Blocos redundantes (Summary Box, KPI Cards, Executive Notes) limpos com sucesso!")
 
         # Smart Fallback: Execution suites version filtering
         ver_filter_match = re.search(r'(?:apenas|so|somente|filtrar?|listar?|liestar?|isol(?:ar|a)|mostrar?)\s+.*?(v\d+\.\d+(?:\.\d+)?)\b', user_prompt, re.I)
@@ -746,7 +793,8 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
 
         clean_reply = raw_text
         # Strict Premise 1: Clean all residual HTML code blocks and internal tags from chat side
-        clean_reply = re.sub(r'<(?:HTML_EDIT|REMOVE_HTML|INJECT_CSS|HIDE_ELEMENT|SHOW_ELEMENT|EXECUTIVE_NOTE|CUSTOM_SECTION|UPDATE_RECOMMENDATION|CUSTOM_REPORT_JSON|REPORT_HTML)>.*?</(?:HTML_EDIT|REMOVE_HTML|INJECT_CSS|HIDE_ELEMENT|SHOW_ELEMENT|EXECUTIVE_NOTE|CUSTOM_SECTION|UPDATE_RECOMMENDATION|CUSTOM_REPORT_JSON|REPORT_HTML)>', '', clean_reply, flags=re.DOTALL | re.IGNORECASE).strip()
+        clean_reply = re.sub(r'<(?:HTML_EDIT|REMOVE_HTML|INJECT_CSS|HIDE_ELEMENT|SHOW_ELEMENT|EXECUTIVE_NOTE|CUSTOM_SECTION|UPDATE_RECOMMENDATION|CUSTOM_REPORT_JSON|REPORT_HTML|CLEAR_NOTES|REMOVE_NOTES|RESET_NOTES)>.*?</(?:HTML_EDIT|REMOVE_HTML|INJECT_CSS|HIDE_ELEMENT|SHOW_ELEMENT|EXECUTIVE_NOTE|CUSTOM_SECTION|UPDATE_RECOMMENDATION|CUSTOM_REPORT_JSON|REPORT_HTML|CLEAR_NOTES|REMOVE_NOTES|RESET_NOTES)>', '', clean_reply, flags=re.DOTALL | re.IGNORECASE).strip()
+        clean_reply = re.sub(r'<(?:CLEAR_NOTES|REMOVE_NOTES|RESET_NOTES)\s*/?>', '', clean_reply, flags=re.I).strip()
         clean_reply = re.sub(r'```(?:json)?\s*\{.*?\}\s*```', '', clean_reply, flags=re.DOTALL | re.IGNORECASE).strip()
         clean_reply = re.sub(r'```(?:html)?\s*<!DOCTYPE html.*?</html>\s*```', '', clean_reply, flags=re.DOTALL | re.IGNORECASE).strip()
         clean_reply = re.sub(r'<!DOCTYPE html.*?</html>', '', clean_reply, flags=re.DOTALL | re.IGNORECASE).strip()

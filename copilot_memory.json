@@ -10,7 +10,8 @@
     "Executive defect tables in Siemens SAT reports must include Component/Subsystem, Root Cause Hypothesis, and Firmware Target Version columns for complete engineering traceability.",
     "Do not create or display quick buttons, preset chips, or hardcoded shortcut buttons in the UI for test plans or actions, as the user frequently switches between different test plans dynamically and requires a clean, unobstructed interface.",
     "Dashboard layout has the Live Report Preview on the left, Resizable Chat placed on the right (at the end) with expanded comfortable reading width (>=520px), and instant bilingual language toggle (English / Portuguese) on the dashboard header.",
-    "Quando o utilizador indicar ou mudar de Test Plan (ex: XPNB-1229, XPECD-5455, etc.), o relatório deve ser imediatamente gerado e focado a 100% nos dados reais desse plano específico do Jira, sem misturar ou manter suites de planos anteriores."
+    "Quando o utilizador indicar ou mudar de Test Plan (ex: XPNB-1229, XPECD-5455, etc.), o relatório deve ser imediatamente gerado e focado a 100% nos dados reais desse plano específico do Jira, sem misturar ou manter suites de planos anteriores.",
+    "REGRA DE EDIÇÃO E REMOÇÃO: Quando o utilizador pedir para apagar ou remover elementos (ou enviar um print a indicar algo para apagar), NUNCA adicionar novas notas, caixas ou secções adicionais. Cumprir estritamente a remoção solicitada (<CLEAR_NOTES/>, <HIDE_ELEMENT>) sem inventar nem acrescentar blocos que não foram pedidos."
   ],
   "preferences": {
     "report_language": "English",

@@ -516,19 +516,26 @@ def render_custom_report(custom_data, state=None):
         </div>
         """
 
+    hidden_elements = set(state.get("hidden_elements") or [])
+    if any(k in hidden_elements for k in ["kpi_cards", "kpis", "kpi_grid", "kpi"]):
+        kpi_grid_html = ""
+    if any(k in hidden_elements for k in ["summary_box", "banner", "hero_banner", "hero", "resumo"]):
+        summary_box_html = ""
+
     # Executive Notes
     exec_notes_html = ""
-    for n in (custom_data.get("executive_notes") or state.get("executive_notes") or []):
-        n_clean = clean_german_text(str(n).strip())
-        if n_clean:
-            exec_notes_html += f"""
-            <div class="callout">
-                <div style="font-weight:700; color:var(--siemens-ink); font-size:14px; margin-bottom:6px;">
-                    💡 Engineering Advisory &amp; Quality Notes
+    if not any(k in hidden_elements for k in ["executive_notes", "notes", "advisory", "callouts", "callout"]):
+        for n in (custom_data.get("executive_notes") or state.get("executive_notes") or []):
+            n_clean = clean_german_text(str(n).strip())
+            if n_clean:
+                exec_notes_html += f"""
+                <div class="callout">
+                    <div style="font-weight:700; color:var(--siemens-ink); font-size:14px; margin-bottom:6px;">
+                        💡 Engineering Advisory &amp; Quality Notes
+                    </div>
+                    <div style="color:#1e293b; font-size:13.5px; line-height:1.5;">{n_clean}</div>
                 </div>
-                <div style="color:#1e293b; font-size:13.5px; line-height:1.5;">{n_clean}</div>
-            </div>
-            """
+                """
 
     # Sections
     sections_html = ""
@@ -730,13 +737,26 @@ def render_html_report(state):
         if c_desc:
             recom_desc = c_desc
 
+    hidden_elements = set(state.get("hidden_elements") or [])
+    if state.get("hide_summary_box"):
+        hidden_elements.add("summary_box")
+    if state.get("hide_kpi_cards"):
+        hidden_elements.add("kpi_cards")
+    if state.get("hide_section_2"):
+        hidden_elements.add("section_2")
+    if state.get("hide_section_3"):
+        hidden_elements.add("section_3")
+    if state.get("hide_executive_notes") or state.get("hide_notes"):
+        hidden_elements.add("executive_notes")
+
     # Executive Notes / Quality Advisories
     exec_notes = state.get("executive_notes") or []
     exec_notes_html = ""
-    for note in exec_notes:
-        note_clean = clean_german_text(str(note).strip())
-        if note_clean:
-            exec_notes_html += f"""
+    if not any(k in hidden_elements for k in ["executive_notes", "notes", "advisory", "callouts", "callout"]):
+        for note in exec_notes:
+            note_clean = clean_german_text(str(note).strip())
+            if note_clean:
+                exec_notes_html += f"""
         <div class="callout" style="margin: 20px 0; padding: 16px 20px; background: #f0fdf4; border-left: 5px solid var(--siemens-petrol); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
             <div style="font-weight:700; color:var(--siemens-ink); font-size:14px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
                 <span style="font-size:16px;">💡</span> Engineering Advisory &amp; Quality Notes
