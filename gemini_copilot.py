@@ -14,7 +14,7 @@ if CURRENT_DIR not in sys.path:
 from jira_xray_client import JiraXrayClient
 from report_builder import render_html_report, render_custom_report, clean_german_text
 
-GEMINI_API_KEY = "AQ.Ab8RN6LTu2wrKrkivBXtU2OYfH_5IIK3XvcoDgAQe2eh2TG0Kg"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-3-flash-preview"
 FALLBACK_MODELS = [
     "gemini-3-flash-preview",
@@ -27,7 +27,7 @@ FALLBACK_MODELS = [
 class GeminiCopilot:
     def __init__(self, client=None):
         self.client = client or JiraXrayClient()
-        self.api_key = GEMINI_API_KEY
+        self.api_key = self.get_api_key()
         self.model = GEMINI_MODEL
         self.fallback_models = FALLBACK_MODELS
         self.session_stats = {
@@ -38,6 +38,43 @@ class GeminiCopilot:
             "last_model": self.model,
             "last_latency_s": 0.0
         }
+
+    def get_api_key(self):
+        # 1. Environment variable
+        key = os.getenv("GEMINI_API_KEY")
+        if key and len(key.strip()) > 10:
+            return key.strip()
+
+        # 2. .env file in CURRENT_DIR or parent
+        for base_dir in [CURRENT_DIR, os.path.dirname(CURRENT_DIR)]:
+            env_path = os.path.join(base_dir, ".env")
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("GEMINI_API_KEY="):
+                                k = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                if k and len(k) > 10:
+                                    return k
+                except Exception:
+                    pass
+
+        # 3. dashboard-config.json
+        for base_dir in [CURRENT_DIR, os.path.dirname(CURRENT_DIR)]:
+            cfg_path = os.path.join(base_dir, "dashboard-config.json")
+            if os.path.exists(cfg_path):
+                try:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                        k = cfg.get("geminiApiKey") or cfg.get("gemini_api_key")
+                        if k and len(str(k).strip()) > 10:
+                            return str(k).strip()
+                except Exception:
+                    pass
+
+        # 4. Fallback constant
+        return GEMINI_API_KEY
 
     def load_memory(self):
         mem_paths = [
@@ -80,7 +117,23 @@ class GeminiCopilot:
         - Never resets report to static Jira template unless explicit Jira refresh/plan change is requested.
         - Preserves and accumulates custom engineering notes, sections, and element visibility states.
         """
+        self.api_key = self.get_api_key()
         state = dict(current_state or {})
+        if not self.api_key or len(self.api_key.strip()) < 10:
+            error_msg = (
+                "⚠️ **Chave de API Google Gemini não configurada ou vazia**\n\n"
+                "Para ativar o Copilot com IA Gemini, configure a sua chave de API (gratuita ou do seu plano Gemini Pro):\n\n"
+                "1. Obtenha uma chave em: **[Google AI Studio](https://aistudio.google.com/app/apikey)** (chave a começar por `AIzaSy...`).\n"
+                "2. Crie ou edite o ficheiro `.env` na pasta `REPORT_MEETING`:\n"
+                "   ```env\n"
+                "   GEMINI_API_KEY=AIzaSy...\n"
+                "   ```\n"
+                "   *(ou adicione ao ficheiro `dashboard-config.json` no campo `\"geminiApiKey\": \"AIzaSy...\"`)*\n\n"
+                "3. Envie uma nova mensagem no chat — o Copilot lê a chave imediatamente sem ter de reiniciar!"
+            )
+            return error_msg, state, state.get("current_html"), {
+                "model": self.model, "latency_s": 0.0, "prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0, "service_tier": "standard", "timestamp": time.strftime("%H:%M:%S")
+            }
         history = list(chat_history or [])
         curr_plan = state.get("plan_key", "XPNB-1229")
 
@@ -440,7 +493,11 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
                     err_body = e.read().decode('utf-8', errors='ignore')
                     last_error_detail = f"HTTP {e.code}"
                     print(f"[GeminiCopilot] {model_name} tentativa {attempt+1} HTTP {e.code}: {err_body[:100]}")
-                    if e.code == 404:
+                    if e.code == 401:
+                        last_error_detail = "API_KEY_INVALID"
+                        print("[GeminiCopilot] Chave de API Google Gemini invalida ou revogada (HTTP 401).")
+                        break
+                    elif e.code == 404:
                         break  # Model deprecated, skip to next model
                     elif e.code in (429, 500, 502, 503, 504):
                         time.sleep(1.0 * (attempt + 1))
@@ -457,15 +514,29 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
                     print(f"[GeminiCopilot] {model_name} tentativa {attempt+1} erro: {e}")
                     break
 
-            if raw_text:
+            if raw_text or last_error_detail == "API_KEY_INVALID":
                 break
 
         if not raw_text:
-            raw_text = (
-                "Desculpe, os servidores da Google estão com uma procura anormalmente alta neste instante "
-                "(503 / Timeout). Já tentei modelos alternativos automaticamente sem sucesso. "
-                "Por favor, repita o seu pedido dentro de alguns segundos."
-            )
+            if last_error_detail == "API_KEY_INVALID":
+                raw_text = (
+                    "⚠️ **Erro de Autenticação Gemini (HTTP 401 - Chave de API Inválida ou Revogada)**\n\n"
+                    "A chave de API do Google Gemini configurada foi rejeitada pelo servidor da Google (chave revogada automaticamente pelos sistemas de segurança do Google/GitHub após o commit).\n\n"
+                    "👉 **Como resolver em 30 segundos:**\n"
+                    "1. Obtenha uma chave de API válida (gratuita ou do seu plano Gemini Pro) em: **[Google AI Studio](https://aistudio.google.com/app/apikey)** (chave a começar por `AIzaSy...`).\n"
+                    "2. Crie ou edite o ficheiro `.env` na pasta `REPORT_MEETING`:\n"
+                    "   ```env\n"
+                    "   GEMINI_API_KEY=AIzaSy...\n"
+                    "   ```\n"
+                    "   *(ou adicione ao `dashboard-config.json` no campo `\"geminiApiKey\": \"AIzaSy...\"`)*\n\n"
+                    "3. Envie novamente uma mensagem aqui no chat — o Copilot lê a nova chave imediatamente sem precisar de reiniciar!"
+                )
+            else:
+                raw_text = (
+                    f"Desculpe, os servidores da Google estão com uma procura anormalmente alta neste instante "
+                    f"({last_error_detail or '503 / Timeout'}). Já tentei modelos alternativos automaticamente sem sucesso. "
+                    "Por favor, repita o seu pedido dentro de alguns segundos."
+                )
 
         # Extract <LEARNED_RULE>...</LEARNED_RULE> if Gemini extracted a new rule
         learned_matches = re.findall(r'<LEARNED_RULE>(.*?)</LEARNED_RULE>', raw_text, re.DOTALL | re.IGNORECASE)
