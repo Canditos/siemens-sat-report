@@ -11,7 +11,8 @@
     "Do not create or display quick buttons, preset chips, or hardcoded shortcut buttons in the UI for test plans or actions, as the user frequently switches between different test plans dynamically and requires a clean, unobstructed interface.",
     "Dashboard layout has the Live Report Preview on the left, Resizable Chat placed on the right (at the end) with expanded comfortable reading width (>=520px), and instant bilingual language toggle (English / Portuguese) on the dashboard header.",
     "Quando o utilizador indicar ou mudar de Test Plan (ex: XPNB-1229, XPECD-5455, etc.), o relatório deve ser imediatamente gerado e focado a 100% nos dados reais desse plano específico do Jira, sem misturar ou manter suites de planos anteriores.",
-    "REGRA DE EDIÇÃO E REMOÇÃO: Quando o utilizador pedir para apagar ou remover elementos (ou enviar um print a indicar algo para apagar), NUNCA adicionar novas notas, caixas ou secções adicionais. Cumprir estritamente a remoção solicitada (<CLEAR_NOTES/>, <HIDE_ELEMENT>) sem inventar nem acrescentar blocos que não foram pedidos."
+    "REGRA DE EDIÇÃO E REMOÇÃO: Quando o utilizador pedir para apagar ou remover elementos (ou enviar um print a indicar algo para apagar), NUNCA adicionar novas notas, caixas ou secções adicionais. Cumprir estritamente a remoção solicitada (<CLEAR_NOTES/>, <HIDE_ELEMENT>) sem inventar nem acrescentar blocos que não foram pedidos.",
+    "REGRA DE DINAMISMO TOTAL: O sistema nunca deve depender de regras hardcoded para tarefas específicas. Deve ser 100% dinâmico e adaptar-se a qualquer pedido do utilizador (qualquer versão de firmware, qualquer filtro, qualquer tópico de relatório personalizado, qualquer ajuste de KPIs, secções ou elementos visuais) atuando em estrita conformidade com o que é pedido a cada momento."
   ],
   "preferences": {
     "report_language": "English",

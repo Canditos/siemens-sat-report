@@ -551,7 +551,46 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
 
         has_state_modification = False
 
-        # Intent checks for removal requests
+                # 1. Action: Filter suites by version, status or search
+        filter_matches = re.findall(r'<SET_FILTER\s+([^>]*)/?>', raw_text, re.I)
+        for attr_str in filter_matches:
+            v_m = re.search(r'version=["\']([^"\']+)["\']', attr_str, re.I)
+            if v_m:
+                state["filter_version"] = v_m.group(1).strip()
+            s_m = re.search(r'status=["\']([^"\']+)["\']', attr_str, re.I)
+            if s_m:
+                state["filter_status"] = s_m.group(1).strip()
+            q_m = re.search(r'search=["\']([^"\']+)["\']', attr_str, re.I)
+            if q_m:
+                state["filter_search"] = q_m.group(1).strip()
+            has_state_modification = True
+        raw_text = re.sub(r'<SET_FILTER\s+[^>]*\/?>', '', raw_text, flags=re.I).strip()
+
+        if re.search(r'<CLEAR_FILTER\s*\/?>', raw_text, re.I):
+            state.pop("filter_version", None)
+            state.pop("filter_status", None)
+            state.pop("filter_search", None)
+            has_state_modification = True
+            raw_text = re.sub(r'<CLEAR_FILTER\s*\/?>', '', raw_text, flags=re.I).strip()
+
+        # 2. Action: Set / Reset Custom KPIs
+        kpi_match = re.search(r'<SET_KPIS>(.*?)</SET_KPIS>', raw_text, re.DOTALL | re.I)
+        if kpi_match:
+            try:
+                k_data = json.loads(kpi_match.group(1).strip())
+                if isinstance(k_data, list):
+                    state["custom_kpis"] = k_data
+                    has_state_modification = True
+            except Exception as e:
+                print(f"[GeminiCopilot] Error parsing SET_KPIS: {e}")
+            raw_text = re.sub(r'<SET_KPIS>.*?</SET_KPIS>', '', raw_text, flags=re.DOTALL | re.I).strip()
+
+        if re.search(r'<RESET_KPIS\s*\/?>', raw_text, re.I):
+            state.pop("custom_kpis", None)
+            has_state_modification = True
+            raw_text = re.sub(r'<RESET_KPIS\s*\/?>', '', raw_text, flags=re.I).strip()
+
+        # 3. Action: Clear notes / Executive notes management
         user_wants_remove_notes = bool(re.search(
             r'(?:apag(?:a|ar)|remov(?:e|er)|tir(?:a|ar)|elimin(?:a|ar)|escond(?:e|er))\s+.*?(?:nota|notes|advisory|callout|bloco|tudo|redundant)|(?:redundant|continuam\s+aqui|ainda\s+aqui|nao\s+apagaste|nao\s+esta\s+ok)',
             user_prompt,
@@ -591,7 +630,6 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
             for tit, content in sec_matches:
                 tit_clean = clean_german_text((tit or "Engineering Deep Dive").strip())
                 cont_clean = clean_german_text(content.strip())
-                # Replace if already exists with same title or append
                 matched_sec = None
                 for s in state["custom_sections"]:
                     if s.get("title") == tit_clean:
@@ -603,6 +641,15 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
                     state["custom_sections"].append({"title": tit_clean, "content": cont_clean})
             has_state_modification = True
             raw_text = re.sub(r'<CUSTOM_SECTION.*?</CUSTOM_SECTION>', '', raw_text, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        # Extract <REMOVE_SECTION title="...">
+        rem_sec_matches = re.findall(r'<REMOVE_SECTION(?:\s+title=["\'](.*?)["\'])?\s*/?>', raw_text, re.I)
+        for rtit in rem_sec_matches:
+            if rtit:
+                rtit_low = rtit.strip().lower()
+                state["custom_sections"] = [s for s in state.get("custom_sections", []) if rtit_low not in s.get("title", "").lower()]
+                has_state_modification = True
+        raw_text = re.sub(r'<REMOVE_SECTION.*?>', '', raw_text, flags=re.I).strip()
 
         # Extract <UPDATE_RECOMMENDATION status="..." title="...">...</UPDATE_RECOMMENDATION>
         recom_match = re.search(r'<UPDATE_RECOMMENDATION(?:\s+status=["\'](.*?)["\'])?(?:\s+title=["\'](.*?)["\'])?>(.*?)</UPDATE_RECOMMENDATION>', raw_text, re.DOTALL | re.IGNORECASE)
@@ -644,66 +691,85 @@ Confirma a sincronização em Português e sintetiza os principais destaques té
             has_state_modification = True
         raw_text = re.sub(r'<INJECT_CSS>.*?</INJECT_CSS>', '', raw_text, flags=re.DOTALL | re.IGNORECASE).strip()
 
-        # Smart Fallback: Banner / Summary box removal intent
-        user_wants_remove_banner = bool(re.search(r'(?:apag(?:a|ar)|remov(?:e|er)|tir(?:a|ar)|elimin(?:a|ar)|escond(?:e|er))\s+.*?(?:banner|resumo|sumario|hero)', user_prompt, re.I))
-        user_said_apaga_isto = bool(re.search(r'\b(?:apag(?:a|ar)|remov(?:e|er)|tir(?:a|ar)|elimin(?:a|ar))\s+isto\b', user_prompt, re.I))
-        gemini_said_removed_banner = bool(re.search(r'(?:remov[ei]|elimin[ei]|ocultei|retirei)\s+.*?(?:banner|resumo)', raw_text, re.I))
-
-        if user_wants_remove_banner or (user_said_apaga_isto and gemini_said_removed_banner) or gemini_said_removed_banner:
+        # 4. Dynamic Generic Fallback for Natural Language Instructions
+        # If user asked to remove / delete:
+        if any(w in user_prompt.lower() for w in ["apag", "remov", "tir", "elimin", "escond", "redundant", "continuam aqui", "nao apagaste"]):
             state.setdefault("hidden_elements", [])
-            if "summary_box" not in state["hidden_elements"]:
-                state["hidden_elements"].append("summary_box")
+            if any(w in user_prompt.lower() for w in ["nota", "advisory", "callout", "redundant", "continuam aqui", "nao apagaste", "apaga isto"]):
+                state["executive_notes"] = []
+                if "executive_notes" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("executive_notes")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["banner", "resumo", "sumario", "hero", "apaga isto"]):
+                if "summary_box" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("summary_box")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["kpi", "cartao", "cartão", "cartoes", "cartões", "apaga isto"]):
+                if "kpi_cards" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("kpi_cards")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["video", "vídeo", "demo", "curva"]):
+                if "section_2" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("section_2")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["seccao 1", "secção 1", "execucoes", "execuções"]):
+                if "section_1" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("section_1")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["seccao 3", "secção 3", "ambito", "âmbito", "scope"]):
+                if "section_3" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("section_3")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["seccao 4", "secção 4", "defeito", "defeitos", "risco"]):
+                if "section_4" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("section_4")
+                has_state_modification = True
+            if any(w in user_prompt.lower() for w in ["seccao 5", "secção 5", "recomenda", "recomendação"]):
+                if "section_5" not in state["hidden_elements"]:
+                    state["hidden_elements"].append("section_5")
                 has_state_modification = True
 
-        if "kpi" in user_prompt.lower() and any(w in user_prompt.lower() for w in ["apag", "remov", "tir", "elimin", "escond"]):
-            state.setdefault("hidden_elements", [])
-            if "kpi_cards" not in state["hidden_elements"]:
-                state["hidden_elements"].append("kpi_cards")
-                has_state_modification = True
+        # If user asked to restore / show:
+        if any(w in user_prompt.lower() for w in ["mostr", "restaur", "recuper", "volt", "exib"]):
+            if "hidden_elements" in state:
+                if any(w in user_prompt.lower() for w in ["banner", "resumo", "hero"]):
+                    state["hidden_elements"] = [x for x in state["hidden_elements"] if x not in ["summary_box", "banner", "hero", "resumo"]]
+                    has_state_modification = True
+                if any(w in user_prompt.lower() for w in ["kpi", "cartao", "cartão", "cartoes", "cartões"]):
+                    state["hidden_elements"] = [x for x in state["hidden_elements"] if x not in ["kpi_cards", "kpis", "kpi_grid"]]
+                    has_state_modification = True
+                if any(w in user_prompt.lower() for w in ["video", "vídeo", "demo"]):
+                    state["hidden_elements"] = [x for x in state["hidden_elements"] if x not in ["section_2", "video", "demo"]]
+                    has_state_modification = True
 
-        user_wants_restore_banner = bool(re.search(r'(?:mostr(?:a|ar)|restaur(?:a|ar)|recuper(?:a|ar)|volt(?:a|ar)\s+a\s+mostr(?:a|ar))\s+.*?(?:banner|resumo|sumario|hero)', user_prompt, re.I))
-        if user_wants_restore_banner and "hidden_elements" in state:
-            state["hidden_elements"] = [x for x in state["hidden_elements"] if x not in ["summary_box", "banner", "hero", "hero_banner", "resumo"]]
-            has_state_modification = True
-
-        # Smart Fallback: Notes / Advisory removal intent
-        gemini_said_removed_notes = bool(re.search(
-            r'(?:remov[ei]|elimin[ei]|ocultei|retirei|limp(?:ei|ado))\s+.*?(?:nota|notes|advisory|callout|bloco)',
-            raw_text,
-            re.I
-        ))
-
-        if user_wants_remove_notes or gemini_said_removed_notes:
-            state["executive_notes"] = []
-            state.setdefault("hidden_elements", [])
-            if "executive_notes" not in state["hidden_elements"]:
-                state["hidden_elements"].append("executive_notes")
-            has_state_modification = True
-            print("[GeminiCopilot] Notas de engenharia limpas e ocultadas com sucesso!")
-
-        # Smart Fallback: If user asks to remove redundant area / "continuam aqui" pointing to top
-        if user_wants_remove_top_block:
-            state.setdefault("hidden_elements", [])
-            for el in ["summary_box", "kpi_cards", "executive_notes"]:
-                if el not in state["hidden_elements"]:
-                    state["hidden_elements"].append(el)
-            state["executive_notes"] = []
-            has_state_modification = True
-            print("[GeminiCopilot] Blocos redundantes (Summary Box, KPI Cards, Executive Notes) limpos com sucesso!")
-
-        # Smart Fallback: Execution suites version filtering
-        ver_filter_match = re.search(r'(?:apenas|so|somente|filtrar?|listar?|liestar?|isol(?:ar|a)|mostrar?)\s+.*?(v\d+\.\d+(?:\.\d+)?)\b', user_prompt, re.I)
-        if ver_filter_match:
-            matched_v = ver_filter_match.group(1).lower()
+        # Generic Version Filter Intent (any version: v1.0.14, v1.0.12, v2.0, etc.)
+        ver_match = re.search(r'\b(v\d+(?:\.\d+)+(?:-[a-z0-9]+)?)\b', user_prompt, re.I)
+        if ver_match and any(w in user_prompt.lower() for w in ["apenas", "so", "somente", "filtr", "list", "mostr", "isol"]):
+            matched_v = ver_match.group(1).lower()
             state["filter_version"] = matched_v
             has_state_modification = True
-            print(f"[GeminiCopilot] Ativado filtro de suites por versao: {matched_v}")
+            print(f"[GeminiCopilot] Dynamic execution filter applied for: {matched_v}")
 
         if re.search(r'(?:todas\s+as\s+vers|remover\s+filtro|sem\s+filtro|limpar\s+filtro)', user_prompt, re.I):
             if "filter_version" in state:
                 state.pop("filter_version", None)
                 has_state_modification = True
-                print("[GeminiCopilot] Removido filtro de versao das suites.")
+                print("[GeminiCopilot] Removed version filter from executions.")
+
+        # Consistency guarantee: If Gemini explicitly claims in chat that it removed something, make sure it is hidden!
+        if re.search(r'(?:remov[ei]|elimin[ei]|ocultei|retirei)\s+.*?(?:banner|resumo)', raw_text, re.I):
+            state.setdefault("hidden_elements", [])
+            if "summary_box" not in state["hidden_elements"]:
+                state["hidden_elements"].append("summary_box")
+                has_state_modification = True
+
+        if re.search(r'(?:remov[ei]|elimin[ei]|ocultei|retirei|limp(?:ei|ado))\s+.*?(?:nota|notes|advisory|callout)', raw_text, re.I):
+            state["executive_notes"] = []
+            state.setdefault("hidden_elements", [])
+            if "executive_notes" not in state["hidden_elements"]:
+                state["hidden_elements"].append("executive_notes")
+            has_state_modification = True
+
 
         # Extract <CUSTOM_REPORT_JSON>...</CUSTOM_REPORT_JSON>
         custom_json_match = re.search(r'<CUSTOM_REPORT_JSON>(.*?)</CUSTOM_REPORT_JSON>', raw_text, re.DOTALL | re.IGNORECASE)
