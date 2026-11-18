@@ -91,14 +91,43 @@ class JiraXrayClient:
                 "issuelinks": fields.get("issuelinks", [])
             }
         except Exception as e:
-            print(f"Error getting issue {issue_key}: {e}")
+            print(f"Jira REST API failed for {issue_key}: {e}. Trying Xray GraphQL fallback...")
+            try:
+                q = f"""{{
+                    getTestPlans(jql: "key = '{issue_key}'", limit: 1) {{
+                        results {{
+                            issueId
+                            jira(fields: ["key", "summary", "status", "project"])
+                        }}
+                    }}
+                }}"""
+                xres = self.xray_graphql(q)
+                res_list = xres.get("data", {}).get("getTestPlans", {}).get("results", []) if xres else []
+                if res_list:
+                    p = res_list[0]
+                    pj = p.get("jira", {})
+                    return {
+                        "key": pj.get("key", issue_key),
+                        "id": p.get("issueId"),
+                        "type": "Test Plan",
+                        "summary": pj.get("summary", ""),
+                        "description": "",
+                        "status": pj.get("status", {}).get("name", "Active"),
+                        "project": pj.get("project", {}).get("key", issue_key.split('-')[0]),
+                        "project_name": pj.get("project", {}).get("name", ""),
+                        "versions": [],
+                        "fix_versions": [],
+                        "issuelinks": []
+                    }
+            except Exception as xe:
+                print(f"Xray fallback failed: {xe}")
             return None
 
     def get_test_plan_details(self, plan_key):
         return self.get_issue_info(plan_key)
 
     def get_test_executions(self, plan_key):
-        """Find all Test Executions linked to a Test Plan via JQL."""
+        """Find all Test Executions linked to a Test Plan via JQL or Xray GraphQL."""
         jql = f"issue in testPlanTestExecutions('{plan_key}') ORDER BY created DESC"
         try:
             res = self.jira_post("search/jql", {
@@ -106,9 +135,49 @@ class JiraXrayClient:
                 "maxResults": 100,
                 "fields": ["summary", "status", "created", "assignee", "fixVersions", "versions", "issuelinks"]
             })
-            return res.get("issues", [])
+            issues = res.get("issues", [])
+            if issues:
+                return issues
         except Exception as e:
-            print(f"Error fetching test executions for {plan_key}: {e}")
+            print(f"Jira search/jql failed for {plan_key}: {e}. Falling back to Xray GraphQL...")
+
+        # Fallback to Xray GraphQL
+        try:
+            iss_info = self.get_issue_info(plan_key)
+            iss_id = iss_info.get("id") if iss_info else None
+            if not iss_id:
+                return []
+            q = f"""{{
+                getTestPlan(issueId: "{iss_id}") {{
+                    testExecutions(limit: 50) {{
+                        results {{
+                            issueId
+                            jira(fields: ["key", "summary", "status", "created"])
+                        }}
+                    }}
+                }}
+            }}"""
+            xres = self.xray_graphql(q)
+            execs_raw = xres.get("data", {}).get("getTestPlan", {}).get("testExecutions", {}).get("results", []) if xres else []
+            out = []
+            for item in execs_raw:
+                j = item.get("jira", {})
+                out.append({
+                    "id": item.get("issueId"),
+                    "key": j.get("key"),
+                    "fields": {
+                        "summary": j.get("summary", ""),
+                        "status": j.get("status", {}),
+                        "created": j.get("created", ""),
+                        "assignee": {},
+                        "fixVersions": [],
+                        "versions": [],
+                        "issuelinks": []
+                    }
+                })
+            return out
+        except Exception as xe:
+            print(f"Xray testExecutions fallback failed: {xe}")
             return []
 
     def get_single_execution_data(self, execution_key):
